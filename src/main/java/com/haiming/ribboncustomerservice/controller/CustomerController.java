@@ -4,6 +4,9 @@ package com.haiming.ribboncustomerservice.controller;
 import com.haiming.ribboncustomerservice.integration.CoffeeService;
 import com.haiming.ribboncustomerservice.model.Coffee;
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerOpenException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -26,15 +29,19 @@ public class CustomerController {
 
 
     private CircuitBreaker circuitBreaker;
+    private Bulkhead bulkhead;
 
-    public CustomerController(CircuitBreakerRegistry registry){
-        circuitBreaker = registry.circuitBreaker("menu");
+    public CustomerController(CircuitBreakerRegistry circuitBreakerRegistry, BulkheadRegistry bulkheadRegistry){
+        circuitBreaker = circuitBreakerRegistry.circuitBreaker("menu");
+        bulkhead = bulkheadRegistry.bulkhead("menu");
+
     }
     @GetMapping("/menu")
     public List<Coffee> readMenu(){
         return Try.ofSupplier(CircuitBreaker.decorateSupplier(circuitBreaker,
                 () -> coffeeService.getAll()))
                 .recover(CircuitBreakerOpenException.class, Collections.emptyList())
+                .recover(BulkheadFullException.class, Collections.emptyList())
                 .get();
     }
 
